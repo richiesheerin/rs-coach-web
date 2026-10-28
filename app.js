@@ -331,7 +331,7 @@ function energyHtml(d) {
     html += `<p class="small" style="margin:6px 0 0">Burned so far: resting ${fmt(b.resting)} · training ${fmt(b.training)} · steps ${fmt(b.walking)} · digestion ${fmt(b.digestion)}.
       About <b>${fmt(b.endOfDay)}</b> by the end of the day if you eat to target and do no more training or walking (lighter bar).</p>
       <p class="small" style="margin:4px 0 0">Eaten minus burned so far: <b>${net > 0 ? "+" : "−"}${fmt(Math.abs(net))} kcal</b>.
-      Hitting the target would leave you about <b>${fmt(Math.abs(plan))} kcal ${plan <= 0 ? "under" : "over"}</b> today's burn${plan <= 0 ? " – the deficit for weight loss" : ""}.</p>`;
+      Hitting the target would leave you about <b>${fmt(Math.abs(plan))} kcal ${plan <= 0 ? "under" : "over"}</b> today's burn${report.goal?.weight_goal === "gain" ? (plan > 0 ? " – the surplus for gaining" : "") : plan <= 0 ? " – the deficit for weight loss" : ""}.</p>`;
   } else {
     html += `<p class="small muted" style="margin:6px 0 0">Add sex, height_cm and birth_year under [profile] in config.toml to see kcal burned.</p>`;
   }
@@ -510,8 +510,8 @@ function leuvenHero() {
     <div class="gtiles">
       ${tile("THRESHOLD (eFTP)", g.eftp.latest, " W", g.eftp.change, wk.map((x) => x.eftp), "up", ftpWkg)}
       ${tile("BEST 20 MIN", g.p20.latest, " W", g.p20.change, wk.map((x) => x.p20_4wk), "up", kickrPct() ? "4-week best, Favero scale" : "4-week best")}
-      ${tile("WEIGHT", kg, " kg", g.weight.change, wk.map((x) => x.weight), "down", `target ${g.target_weight} kg`)}
-      <div class="gtile"><span class="glabel">${g.tt_distance_km} KM TT ESTIMATE</span><b>${ttLatest ?? "–"}</b>${ttChange != null ? `<span class="delta ${ttChange < 0 ? "good" : ttChange > 0 ? "bad" : ""}">${ttChange < 0 ? "▼" : ttChange > 0 ? "▲" : "■"} ${Math.abs(ttChange)} s</span>` : ""}${spark(wk.map((x) => x.tt_secs))}<small class="gsub">flat, still air, from 20-min power</small></div>
+      ${tile("WEIGHT", kg, " kg", g.weight.change, wk.map((x) => x.weight), g.weight_goal === "gain" ? "up" : "down", `target ${g.target_weight} kg`)}
+      ${g.show_tt === false ? "" : `<div class="gtile"><span class="glabel">${g.tt_distance_km} KM TT ESTIMATE</span><b>${ttLatest ?? "–"}</b>${ttChange != null ? `<span class="delta ${ttChange < 0 ? "good" : ttChange > 0 ? "bad" : ""}">${ttChange < 0 ? "▼" : ttChange > 0 ? "▲" : "■"} ${Math.abs(ttChange)} s</span>` : ""}${spark(wk.map((x) => x.tt_secs))}<small class="gsub">flat, still air, from 20-min power</small></div>`}
       ${lrTile(g, wk)}
     </div>
     <p class="gnote">Changes compare the last 4 weeks with the 4 before.${kickrPct() ? ` KICKR efforts (Zwift rides without the pedals' left/right data) are corrected −${kickrPct()}% to the Favero scale.` : ""}</p></section>`;
