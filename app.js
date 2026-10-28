@@ -182,6 +182,7 @@ async function runWorkflow(key, inputs, label) {
 }
 function setBusyButtons(on) {
   $$("[data-busy]").forEach((b) => { b.disabled = on; });
+  $("#refresh").classList.toggle("spin", on);  // the header ⟳ spins while any update runs
 }
 
 // ---------- views ----------
@@ -208,7 +209,7 @@ function render() {
 
 const LOGO = `<div class="logo"><span class="tile"><img src="logo.png" alt="Trainer"></span></div>`;
 const emptyState = () => `${LOGO}<div class="empty">${settings.github
-  ? "No data yet.<br>Tap ⟳ to load, or Log → <b>Update now</b> to fetch from intervals.icu."
+  ? "No data yet.<br>Tap ⟳ to fetch your data from intervals.icu (about a minute)."
   : "Add your GitHub token in <b>Settings</b> (⚙) to load your data."}</div>`;
 
 function sessionHtml(s, f, level) {
@@ -1536,7 +1537,9 @@ splash();
 // ---------- start ----------
 $$(".tabs button").forEach((b) => b.addEventListener("click", () => show(b.dataset.view)));
 $("#open-settings").addEventListener("click", () => show("settings"));
-$("#refresh").addEventListener("click", reload);
+// ⟳ runs a full update (fetch from intervals.icu, rebuild the coach's note), the same as Log → Update now; without
+// a GitHub token it can only reload what's already saved.
+$("#refresh").addEventListener("click", () => (settings.github ? runWorkflow("refresh", { mode: "refresh" }, "Update") : reload()));
 $("#chat-form").addEventListener("submit", (e) => { e.preventDefault(); sendChat(); });
 $("#chat-input").addEventListener("input", autosize);
 window.addEventListener("resize", () => { if (view === "trends") renderTrends(); });
