@@ -7,8 +7,10 @@
 const IN_APK = location.host === "appassets.androidplatform.net";
 const DEFAULT_REPO = IN_APK ? "richiesheerin/RS-training-app" : "";
 // Everyday coach model, and the stronger one for blood-results chats. The engine's config.toml wins when it sends them.
-// Who the app is for and which specialist parts are on ([profile] in config.toml). Older reports predate it: Richie's.
-const profile = () => report?.profile || { name: "Richie", medical: true, food_safety: true, checkin_part: "Hip" };
+// Who the app is for and which specialist parts are on ([profile] in config.toml). Before the first report arrives (or
+// from a report that predates profiles) the Android app is Richie's; the web version shows nothing specialist.
+const profile = () => report?.profile || (IN_APK ? { name: "Richie", medical: true, food_safety: true, checkin_part: "Hip" }
+  : { name: "the athlete", medical: false, food_safety: false, checkin_part: "" });
 const MODELS = { default: "claude-haiku-5-5", medical: "claude-sonnet-5-5" };
 const modelFor = (mode) => report?.coach_models?.[mode === "medical" ? "medical" : "default"] || MODELS[mode === "medical" ? "medical" : "default"];
 const modelName = (m) => m.replace(/^claude-/, "").replace(/-(\d)-(\d)$/, " $1.$2").replace(/^./, (c) => c.toUpperCase());
@@ -1388,7 +1390,7 @@ function openGym() {
   const g = report?.gym || {};
   const ex = (g.exercises || []).map((e, i) => `<div class="ex"><div class="exhead"><b>${i + 1}. ${esc(e.name)}</b><span>${esc(e.sets)}</span></div>
     ${e.tempo ? `<div class="small muted">Tempo: ${esc(e.tempo)}</div>` : ""}<p>${esc(e.cues)}</p>${e.safety ? `<p class="safety">${esc(e.safety)}</p>` : ""}</div>`).join("");
-  openSheet(`<div class="sheet-title">${icon("gym")}<h2>Gym – pelvic stability</h2></div>
+  openSheet(`<div class="sheet-title">${icon("gym")}<h2>${esc(g.title || "Gym session")}</h2></div>
     ${g.warmup ? `<p class="small"><b>Warm-up:</b> ${esc(g.warmup)}</p>` : ""}${ex || `<p class="muted">No exercises set – add them under [gym] in config.toml.</p>`}
     ${(g.notes || []).length ? `<div class="note"><div class="label">EVERY SESSION</div>${g.notes.map((n) => `<p>${esc(n)}</p>`).join("")}</div>` : ""}`);
 }
@@ -1429,7 +1431,8 @@ function ruleFeedback(a, planned) {
     out.push([a.decoupling > 5 ? "warn" : "ok", `HR drift ${a.decoupling.toFixed(1)}% – ${a.decoupling > 5 ? "above 5%: fatigue, heat or under-fuelling" : "good aerobic durability"}.`]);
   }
   if (fam === "ride" && a.mins > 75) out.push(["info", `Fuel for this length: 30–60 g carbs/h ≈ ${Math.round(a.mins / 60 * 30)}–${Math.round(a.mins / 60 * 60)} g on the bike.`]);
-  if (fam === "run") out.push(["info", "Run: check the hip and right foot tonight; build run time by no more than ~5 min a week."]);
+  const part = profile().checkin_part;
+  if (fam === "run" && part) out.push(["info", `Run: check the ${esc(part.toLowerCase())} tonight; build run time by no more than ~5 min a week.`]);
   return out.map(([level, text]) => ({ level, text }));
 }
 
@@ -1491,7 +1494,7 @@ function openActivity(id) {
 Activity: ${JSON.stringify(a)}
 Planned that day: ${JSON.stringify(planned)}
 Check-in that day: ${JSON.stringify(checkin)}
-In at most 110 words, 2–4 bullets starting with "- ": how it went against the plan and his rules, anything to watch (recovery markers, hip, HR, fuelling), and what it means for the next 2–3 days.`;
+In at most 110 words, 2–4 bullets starting with "- ": how it went against the plan and their rules, anything to watch (recovery markers, joints or injuries in their brief, HR, fuelling), and what it means for the next 2–3 days.`;
     try {
       let text = "";
       await streamClaude((t) => { text = t; if ($("#fb-text") === el) el.innerHTML = mdLite(t); }, coachSystem(), [{ role: "user", content: prompt }], modelFor("default"));
