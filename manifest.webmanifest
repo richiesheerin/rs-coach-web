@@ -1,0 +1,15 @@
+{
+  "name": "RS Coach",
+  "short_name": "RS Coach",
+  "description": "Training, recovery and fuelling coach.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#01352E",
+  "theme_color": "#01352E",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

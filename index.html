@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>RS Coach</title>
+  <link rel="stylesheet" href="app.css">
+  <meta name="theme-color" content="#01352E">
+  <!-- Web version: add to home screen on iPhone/Android -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="RS Coach">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body>
+  <div id="splash" class="splash" aria-hidden="true">
+    <img class="splash-logo" src="logo-light.png" alt="">
+    <ul class="splash-acts" id="splash-acts"></ul>
+  </div>
+  <header class="top">
+    <span class="tile mark"><img src="mark.svg" alt=""></span>
+    <h1 id="title">Today</h1>
+    <span id="updated" class="muted"></span>
+    <button id="refresh" class="icon" aria-label="Refresh data" title="Refresh">⟳</button>
+    <button id="open-settings" class="icon" aria-label="Settings" title="Settings">⚙</button>
+  </header>
+  <div id="status" class="status" hidden></div>
+
+  <main>
+    <section id="view-today" class="view"></section>
+    <section id="view-week" class="view" hidden></section>
+    <section id="view-trends" class="view" hidden></section>
+    <section id="view-coach" class="view chat" hidden>
+      <div id="chat-log" class="chat-log" aria-live="polite"></div>
+      <div id="chat-suggest" class="chips"></div>
+      <form id="chat-form" class="chat-form">
+        <textarea id="chat-input" rows="1" placeholder="Ask your coach…" aria-label="Message"></textarea>
+        <button type="submit" id="chat-send" class="primary">Send</button>
+      </form>
+    </section>
+    <section id="view-log" class="view"></section>
+    <section id="view-settings" class="view" hidden></section>
+  </main>
+
+  <nav class="tabs" aria-label="Sections">
+    <button data-view="today" class="on">Today</button>
+    <button data-view="week">Week</button>
+    <button data-view="trends">Trends</button>
+    <button data-view="coach">Coach</button>
+    <button data-view="log">Log</button>
+  </nav>
+
+  <div id="sheet" class="sheet" hidden>
+    <div id="sheet-body" class="sheet-body" role="dialog" aria-modal="true">
+      <button id="sheet-close" class="icon sheet-close" aria-label="Close">✕</button>
+      <div id="sheet-content"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
