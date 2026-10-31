@@ -410,3 +410,8 @@ table.rows.food td:last-child { text-align: left; }
 table.rows.nextweek td:first-child { width: 44px; }
 table.rows.nextweek td:last-child { text-align: left; }
 table.rows.nextweek .delta { font-size: 12px; font-weight: 700; }
+
+/* Daily steps on Today */
+.steps { margin-top: 12px; }
+.steps-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; }
+.steps-head b { font-size: 18px; } .steps-head b small { font-size: 12px; font-weight: 500; color: var(--muted); }

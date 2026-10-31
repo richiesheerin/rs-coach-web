@@ -418,6 +418,20 @@ function actLine(a, tag = "") {
     <span class="small">${esc(a.type || "")}${a.start ? ` · ${a.start.slice(11, 16)}` : ""}</span>${tag ? `<br>${tag}` : ""}</div></div></td><td>${bits.join(" · ")}<br><span class="chev">Feedback ›</span></td></tr>`;
 }
 
+// Steps against the daily target ([goals] daily_steps), with what the rest is worth.
+function stepsHtml(steps) {
+  const target = report.goals?.daily_steps;
+  if (!target) return steps != null ? `<div class="stat" style="margin-top:10px"><div><span class="small muted">Steps</span><b>${thousands(steps)}</b></div></div>` : "";
+  const n = steps ?? 0, left = Math.max(0, target - n), pct = Math.min(100, n / target * 100);
+  const perStep = report.energy?.kcal_per_step;
+  const msg = steps == null ? "No steps synced yet today – they come from your Garmin."
+    : left ? `${thousands(left)} to go – about ${Math.round(left / 100)} min of walking${perStep ? `, ~${Math.round(left * perStep)} kcal` : ""}.`
+    : "Target hit – nice. Every extra step is bonus deficit.";
+  return `<div class="steps"><div class="steps-head"><span>Steps</span><b>${thousands(n)}<small> / ${thousands(target)}</small></b></div>
+    <div class="eat-track"><b style="width:${pct.toFixed(1)}%;background:${left ? "var(--z1)" : "var(--z2)"}"></b></div>
+    <p class="small muted" style="margin:4px 0 0">${msg}</p></div>`;
+}
+
 function todaySoFar() {
   const today = isoToday();
   const acts = (report.activities || []).filter((a) => a.date === today);
@@ -441,7 +455,7 @@ function todaySoFar() {
   if (open.length && r && r.verdict !== "Execute") {
     html += `<div class="nag" style="margin-top:10px"><b>${esc(r.verdict)}:</b> ${esc(r.advice)}</div>`;
   }
-  if (steps != null) html += `<div class="stat" style="margin-top:10px"><div><span class="small muted">Steps</span><b>${thousands(steps)}</b></div></div>`;
+  html += stepsHtml(steps);
   const hidden = (report.hidden_by_strava || []).filter((d) => d === today).length;
   if (hidden) html += `<p class="small muted">${hidden} activit${hidden > 1 ? "ies" : "y"} today came in via Strava, so intervals.icu can't share ${hidden > 1 ? "them" : "it"} with this app. Import activities from Garmin in intervals.icu (Settings → Garmin) instead.</p>`;
   if (!anySteps) html += `<p class="small muted">Steps and walks appear once your Garmin syncs straight to intervals.icu (Settings → Connections there).</p>`;
