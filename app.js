@@ -633,6 +633,24 @@ function renderToday() {
   }));
 }
 
+// Next week's progression: what grows, phase and focus, recovery weeks; nothing changes until it's approved.
+function nextWeekCard() {
+  const nw = report.next_week;
+  if (!nw) return "";
+  const rowsHtml = nw.sessions.map((s) => {
+    const ch = s.change_min ? `<span class="delta ${s.change_min > 0 ? "good" : "bad"}">${s.change_min > 0 ? "+" : "−"}${Math.abs(s.change_min)} min</span>` : "";
+    return `<tr><td>${dayName(s.day).split(" ")[0]}</td><td><div class="srow">${icon(iconKey(s.type))}<div>${esc(s.name)}<br><span class="small muted">${dur(s.minutes / 60)} · load ${s.load}</span> ${ch}</div></div></td></tr>`;
+  }).join("");
+  const badge = nw.recovery ? `<span class="stag plan">RECOVERY WEEK</span>` : "";
+  return `<div class="card"><h2>Next week · ${shortDate(nw.monday)}</h2>
+    <p class="small" style="margin:0 0 6px"><b>${esc(nw.phase)}</b>${nw.focus ? ` – ${esc(nw.focus)}` : ""} ${badge}</p>
+    <div class="small muted">${dur(nw.hours)} planned (this week's pattern ${dur(nw.current_hours)}) · load ${nw.load}</div>
+    <table class="rows nextweek" style="margin-top:6px">${rowsHtml || `<tr><td class="muted">Nothing planned – away or rest.</td></tr>`}</table>
+    ${nw.approved ? `<p class="small" style="margin:8px 0 0"><b>Approved ✓</b> – these go on your calendar as the days come up.</p>`
+      : `<div class="actions" style="margin-top:10px"><button class="primary" id="approve-week" data-busy>Approve next week</button><button class="secondary" id="change-week">Ask for a change</button></div>
+         <p class="small muted" style="margin:6px 0 0">Nothing grows until you approve. Today's call can still ease any day.</p>`}</div>`;
+}
+
 function shoppingCard() {
   const mp = report.meal_plan;
   if (!mp?.shopping?.length || !mp.shop_day || mp.shop_day < isoToday()) return "";
@@ -661,7 +679,7 @@ function renderWeek() {
       <span class="num">${detail}<b>${rng(d.carbs)} g</b></span></button>
       ${openDays.has(i) ? `<div class="daydetail">${dayDetail(d)}</div>` : ""}</li>`;
   }).join("");
-  let html = shoppingCard() + `<div class="card"><h2>Next ${report.days.length} days</h2><p class="small muted" style="margin:0 0 4px">Tap a day for its fuelling plan.</p><ul class="days">${items}</ul></div>`;
+  let html = shoppingCard() + nextWeekCard() + `<div class="card"><h2>Next ${report.days.length} days</h2><p class="small muted" style="margin:0 0 4px">Tap a day for its fuelling plan.</p><ul class="days">${items}</ul></div>`;
 
   if (weeklyData) {
     const s = weeklyData.summary;
@@ -692,6 +710,15 @@ function renderWeek() {
     const key = `shop:${report.meal_plan.generated}`;
     store.set(key, $$("[data-shop]", v).filter((x) => x.checked).map((x) => +x.dataset.shop));
   }));
+  $("#approve-week", v)?.addEventListener("click", async () => {
+    const nw = report.next_week;
+    if (await runWorkflow("coach", { approve: nw.monday }, "Approving next week")) renderWeek();
+  });
+  $("#change-week", v)?.addEventListener("click", () => {
+    show("coach");
+    $("#chat-input").value = `About next week's plan (week of ${shortDate(report.next_week.monday)}): `;
+    $("#chat-input").focus();
+  });
   $$(".day", v).forEach((btn) => btn.addEventListener("click", () => {
     const i = +btn.dataset.day;
     openDays.has(i) ? openDays.delete(i) : openDays.add(i);

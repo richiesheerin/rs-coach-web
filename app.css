@@ -405,3 +405,8 @@ table.rows.food td:last-child { text-align: left; }
 .zbar2:not(.now) b { opacity: .75; }
 .key { display: inline-block; width: 9px; height: 9px; margin: 0 4px 0 2px; vertical-align: baseline; }
 .card .delta.good { color: var(--z2); } .card .delta.bad { color: var(--z4); } .card .delta { color: var(--muted); font-size: 12px; font-weight: 700; }
+
+/* Next week card */
+table.rows.nextweek td:first-child { width: 44px; }
+table.rows.nextweek td:last-child { text-align: left; }
+table.rows.nextweek .delta { font-size: 12px; font-weight: 700; }
