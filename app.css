@@ -391,3 +391,17 @@ table.rows.food td:last-child { text-align: left; }
 
 /* Weight plan line on Fuel today */
 .wplan { padding: 8px 10px; background: var(--soft); border-radius: 6px; margin-bottom: 8px; }
+
+/* Zone 2 engine card */
+.card .spark path { stroke: var(--accent); } .card .spark rect { fill: var(--ink); }
+.hero .spark path { stroke: #8fd3c4; } .hero .spark rect { fill: #f2f7f5; }
+.stat div .delta { display: block; margin-top: 2px; }
+.zbars2 { display: flex; gap: 6px; align-items: flex-end; height: 70px; margin-top: 6px; }
+.zbar2 { flex: 1; height: 100%; display: flex; flex-direction: column-reverse; }
+.zbar2 b { display: block; width: 100%; }
+.zbar2 b.easy, .key.easy { background: var(--z2); }
+.zbar2 b.grey, .key.grey { background: var(--z3); }
+.zbar2 b.hard, .key.hard { background: var(--z4); }
+.zbar2:not(.now) b { opacity: .75; }
+.key { display: inline-block; width: 9px; height: 9px; margin: 0 4px 0 2px; vertical-align: baseline; }
+.card .delta.good { color: var(--z2); } .card .delta.bad { color: var(--z4); } .card .delta { color: var(--muted); font-size: 12px; font-weight: 700; }

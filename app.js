@@ -538,6 +538,30 @@ function leuvenHero() {
     <p class="gnote">Changes compare the last 4 weeks with the 4 before.${kickrPct() ? ` KICKR efforts (Zwift rides without the pedals' left/right data) are corrected −${kickrPct()}% to the Favero scale.` : ""}</p></section>`;
 }
 
+// The Zone 2 engine: power at Zone 2 heart rate, heart-rate drift, and how much of each week was easy, grey or hard.
+function zone2Card() {
+  const z = report.zone2;
+  if (!z) return "";
+  const wk = z.weeks || [], zp = z.z2_watts || {}, dr = z.drift || {};
+  const delta = (c, unit, better) => (c == null ? "" : `<span class="delta ${c === 0 ? "" : (c > 0) === (better === "up") ? "good" : "bad"}">${c > 0 ? "▲" : c < 0 ? "▼" : "■"} ${Math.abs(c)}${unit}</span>`);
+  const top = Math.max(...wk.map((w) => w.easy_mins + w.grey_mins + w.hard_mins), 1);
+  const bars = wk.map((w, i) => {
+    const h = (m) => (m / top * 100).toFixed(1);
+    return `<div class="zbar2${i === wk.length - 1 ? " now" : ""}" title="${Math.round(w.easy_mins)} easy · ${Math.round(w.grey_mins)} grey · ${Math.round(w.hard_mins)} hard min">
+      <b class="hard" style="height:${h(w.hard_mins)}%"></b><b class="grey" style="height:${h(w.grey_mins)}%"></b><b class="easy" style="height:${h(w.easy_mins)}%"></b></div>`;
+  }).join("");
+  return `<div class="card"><h2>Zone 2 engine</h2>
+    <p class="small muted" style="margin:0 0 8px">More power at the same Zone 2 heart rate (${z.band[0]}–${z.band[1]} bpm) is the aerobic engine growing.</p>
+    <div class="stat">
+      <div><span class="small muted">Zone 2 power</span><b>${zp.latest ?? "–"}${zp.latest != null ? "<small> W</small>" : ""}</b>${delta(zp.change, " W", "up")}${spark(wk.map((w) => w.z2_watts), { w: 120, h: 30 })}</div>
+      <div><span class="small muted">HR drift, 60+ min</span><b>${dr.latest != null ? `${dr.latest}<small>%</small>` : "–"}</b>${delta(dr.change, "%", "down")}<small class="muted">under 5% is good</small></div>
+    </div>
+    <div class="hlabel" style="margin-top:12px;color:var(--muted)">EASY · GREY ZONE · HARD — 8 WEEKS</div>
+    <div class="zbars2">${bars}</div>
+    <p class="small" style="margin:6px 0 0"><span class="key easy"></span>Easy ${z.easy_share_4wk ?? "–"}% · <span class="key grey"></span>Grey zone ${z.grey_share_4wk ?? "–"}% · <span class="key hard"></span>Hard ${z.easy_share_4wk != null ? `${100 - z.easy_share_4wk - z.grey_share_4wk}%` : "–"} <span class="muted">(last 4 weeks)</span></p>
+    <p class="small muted" style="margin:4px 0 0">Grey zone = above Zone 2 but not a hard session: adds fatigue without the Zone 2 gain. Keep easy days easy.</p></div>`;
+}
+
 function lrTile(g, wk) {
   // Left share of power by week, against his usual split. Shown as a trend to watch, never as a 50/50 target.
   const lp = g.left_pct || {}, base = g.lr_baseline_left, left = lp.latest;
@@ -795,7 +819,7 @@ function renderTrends() {
     ...(profile().medical ? [{ id: "c-hb", title: "Haemoglobin (g/L)", series: [{ name: "Hb", color: css("--s1"), points: pointsOf(report.labs || [], "hb", "date") }], unit: " g/L" }] : []),
   ];
   const eff = report.efficiency;
-  let html = leuvenHero() + walkingCard();
+  let html = leuvenHero() + zone2Card() + walkingCard();
   html += `<div class="card"><h2>Watts per heartbeat</h2>${eff
     ? `<div class="stat"><div><span class="small muted">Last 14 days vs 4 weeks before</span><b>${signed(eff.change_pct, 0)}%</b></div></div>
        <p class="small muted">Steady rides${kickrPct() ? ", KICKR corrected to Favero (rides with left/right data are already Favero)" : ""}. A drop means the same power costs more heart rate – fatigue, illness, heat, or lower Hb.</p>`
