@@ -319,6 +319,8 @@ function burnedToday(eaten, target) {
 function energyHtml(d) {
   const eaten = foodLog(d.day).reduce((s, r) => s + itemKcal(r), 0);
   const b = burnedToday(eaten, d.kcal);
+  // The engine's estimate counts today's planned sessions too; use it until what's been done passes it.
+  if (b && d.burn_est) b.endOfDay = Math.max(b.endOfDay, d.burn_est);
   const guessed = foodLog(d.day).some((r) => r.kcal == null);
   const max = Math.max(d.kcal, eaten, b ? b.endOfDay : 0, 1);
   const pct = (v) => (Math.min(v, max) / max * 100).toFixed(1);
@@ -332,13 +334,29 @@ function energyHtml(d) {
     html += row("Burned", b.soFar, "burned", `${fmt(b.soFar)}`, b.endOfDay);
     const net = eaten - b.soFar, plan = d.kcal - b.endOfDay;
     html += `<p class="small" style="margin:6px 0 0">Burned so far: resting ${fmt(b.resting)} · training ${fmt(b.training)} · steps ${fmt(b.walking)} · digestion ${fmt(b.digestion)}.
-      About <b>${fmt(b.endOfDay)}</b> by the end of the day if you eat to target and do no more training or walking (lighter bar).</p>
+      About <b>${fmt(b.endOfDay)}</b> by the end of the day if you eat to target and do today's planned sessions (lighter bar).</p>
       <p class="small" style="margin:4px 0 0">Eaten minus burned so far: <b>${net > 0 ? "+" : "−"}${fmt(Math.abs(net))} kcal</b>.
       Hitting the target would leave you about <b>${fmt(Math.abs(plan))} kcal ${plan <= 0 ? "under" : "over"}</b> today's burn${report.goal?.weight_goal === "gain" ? (plan > 0 ? " – the surplus for gaining" : "") : plan <= 0 ? " – the deficit for weight loss" : ""}.</p>`;
   } else {
     html += `<p class="small muted" style="margin:6px 0 0">Add sex, height_cm and birth_year under [profile] in config.toml to see kcal burned.</p>`;
   }
   return html + `<p class="small muted" style="margin:4px 0 0">Estimates: resting energy from your weight, height and age; training from your devices.</p>`;
+}
+
+// The weight plan behind today's targets: phase, planned vs achievable rate, today's deficit, brakes, what's next.
+function weightPlanHtml(d) {
+  const wp = report.weight_plan;
+  if (!wp) return "";
+  const kg = (r) => `${r > 0 ? "−" : ""}${Math.abs(r).toFixed(r % 1 ? 1 : 0)} kg/week`;
+  const parts = [`<b>${esc(wp.phase)}</b>`];
+  if (wp.planned_rate > 0) {
+    parts.push(`plan ${kg(wp.planned_rate)}`);
+    if (wp.achievable_rate != null) parts.push(`your fuel floors allow about ${kg(wp.achievable_rate)}`);
+    if (d.deficit != null) parts.push(`today ~${thousands(d.deficit)} kcal under your burn`);
+  } else parts.push("eating to what you burn");
+  const next = wp.next ? ` Next: ${esc(wp.next.label)} from ${shortDate(wp.next.from)}.` : "";
+  const brake = wp.brakes?.length ? `<br><b>Slowed to ${kg(wp.rate)}:</b> ${esc(wp.brakes.join(", "))}. Ease off until it settles.` : "";
+  return `<div class="${wp.brakes?.length ? "nag" : "wplan"}"><span class="small">${parts.join(" · ")}.${next}${brake}</span></div>`;
 }
 
 // Today's fuelling: from the report's own "today", or from its days list if the report was made yesterday.
@@ -350,7 +368,7 @@ function todayFuel() {
   const eaten = foodLog(d.day).reduce((s, r) => s + (r.carbs_g || 0), 0);
   return foldCard("fuel-today", `<h2>Fuel today</h2><div class="big">${rng(d.carbs)} g carbs</div>${zbar(d.level)}
     <div class="tier" style="color:${zone(d.level)}">${esc(d.tier)} day · ${d.protein} g protein${eaten ? ` · ${eaten} g eaten` : ""}</div>`,
-    `${eatenHtml(d)}${energyHtml(d)}<p class="small muted" style="margin:8px 0 0">Fat: about ${d.fat} g across the day.</p>${fuel}<h3>Today's meals</h3>${mealsHtml(d)}`);
+    `${weightPlanHtml(d)}${eatenHtml(d)}${energyHtml(d)}<p class="small muted" style="margin:8px 0 0">Fat: about ${d.fat} g across the day.</p>${fuel}<h3>Today's meals</h3>${mealsHtml(d)}`);
 }
 
 const WALKS = new Set(["Walk", "Hike"]);

@@ -388,3 +388,6 @@ table.rows.food td:last-child { text-align: left; }
 .kc-track > b.eaten { background: var(--z2); }
 .kc-track > b.burned { background: var(--z3); }
 .kc-track > b.ghost { background: var(--z3); opacity: .35; }
+
+/* Weight plan line on Fuel today */
+.wplan { padding: 8px 10px; background: var(--soft); border-radius: 6px; margin-bottom: 8px; }
