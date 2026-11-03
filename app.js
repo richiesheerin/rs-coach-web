@@ -35,7 +35,8 @@ let athlete = store.get("athlete", "");
 let chat = store.get("chat", null);
 let view = "today";
 let busy = false;
-let pendingEnergy = null;  // energy tapped on the Today prompt, carried into the check-in form
+let pendingEnergy = null;
+let applying = false;  // a tool card's change is being applied (the coach-update job takes about a minute)  // energy tapped on the Today prompt, carried into the check-in form
 const openDays = new Set();
 
 // ---------- formatting ----------
@@ -1177,6 +1178,7 @@ async function decideTool(id, ok) {
   if (pending.some((b) => !chat.decisions[b.id])) return;  // wait until every card is answered
   const accepted = pending.filter((b) => chat.decisions[b.id].ok);
   let outcome = null;
+  applying = true;
   if (accepted.length) {
     const changes = accepted.filter((b) => b.name === "propose_plan_changes").flatMap((b) => b.input.changes || []);
     const facts = accepted.filter((b) => b.name === "remember").flatMap((b) => b.input.facts || []);
@@ -1197,7 +1199,14 @@ async function decideTool(id, ok) {
       : outcome ? (b.name === "log_food" ? `Logged. ${eatenSummary()}` : { remember: "Saved.", set_food_preferences: "Saved.", change_meals: "Meal plan updated." }[b.name] || "Applied to the intervals.icu calendar.") : "Failed to apply; nothing changed.",
       ...(d.ok && !outcome ? { is_error: true } : {}) };
   });
-  chat.messages.push({ role: "user", content: results });
+  applying = false;
+  if (openTools().some((b) => b.id === pending[0]?.id)) {
+    chat.messages.push({ role: "user", content: results });
+  } else {
+    // The conversation moved on while this was applying: say what happened as a new message instead.
+    const lines = pending.map((b) => `${b.name === "propose_plan_changes" ? "The calendar change" : "The change"} I tapped earlier: ${chat.decisions[b.id].result}`);
+    chat.messages.push({ role: "user", content: `(Update) ${lines.join(" ")}` });
+  }
   store.set("chat", chat);
   await continueChat();
 }
@@ -1294,6 +1303,7 @@ async function sendChat() {
   const text = input.value.trim();
   if (!text || $("#chat-send").disabled) return;
   if (!settings.anthropic) { status("Add your Anthropic API key in Settings first.", "err"); return; }
+  if (applying) { status("Applying your change – send this when it's done (about a minute)."); return; }
   input.value = "";
   autosize();
   // Typing instead of answering a card counts as "not now" for it.
@@ -1312,7 +1322,39 @@ async function sendChat() {
   }
 }
 
+// A tool_result must answer a tool_use in the message right before it. Chats broken before this fix (a card answered
+// twice) are repaired here: stray results are dropped, and a message left empty says so in text.
+function repairChat() {
+  let changed = false;
+  chat.messages = chat.messages.map((m, i) => {
+    if (m.role !== "user" || !Array.isArray(m.content)) return m;
+    const prev = chat.messages[i - 1];
+    const ids = new Set(prev && prev.role === "assistant" && Array.isArray(prev.content) ? prev.content.filter((b) => b.type === "tool_use").map((b) => b.id) : []);
+    const seen = new Set();
+    const content = m.content.filter((b) => {
+      if (b.type !== "tool_result") return true;
+      const keep = ids.has(b.tool_use_id) && !seen.has(b.tool_use_id);
+      seen.add(b.tool_use_id);
+      return keep;
+    });
+    if (content.length === m.content.length) return m;
+    changed = true;
+    return { ...m, content: content.length ? content : "(Update) A change I tapped earlier was applied after all." };
+  });
+  // Two user turns in a row (a repaired message followed by a new one): join them.
+  const toBlocks = (c) => (typeof c === "string" ? [{ type: "text", text: c }] : c);
+  for (let i = chat.messages.length - 1; i > 0; i--) {
+    const [a, b] = [chat.messages[i - 1], chat.messages[i]];
+    if (a.role === "user" && b.role === "user") {
+      chat.messages.splice(i - 1, 2, { role: "user", content: [...toBlocks(a.content), ...toBlocks(b.content)] });
+      changed = true;
+    }
+  }
+  if (changed) store.set("chat", chat);
+}
+
 async function continueChat() {
+  repairChat();
   renderCoach();
   const bubble = document.createElement("div");
   bubble.className = "msg coach typing";
