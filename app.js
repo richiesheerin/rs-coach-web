@@ -1536,12 +1536,14 @@ function ruleFeedback(a, planned) {
   } else if (planned.length) {
     out.push(["info", `Not the planned session (${planned.map((p) => p.name).join(", ")}).`]);
   }
-  const z2 = report.z2_hr;
-  const easy = /Z2|Endurance|Aerobic|spin|Easy|Recovery/i.test(plan?.name || a.name || "");
+  // Zone 2 heart rate differs by sport: running sits higher than cycling for the same effort.
+  const z2 = fam === "run" ? report.z2_hr_run : report.z2_hr;
+  const easy = /Z2|Endurance|Aerobic|spin|Easy|Recovery|run/i.test(plan?.name || a.name || "");
   const hard = a.load && a.mins ? a.load / (a.mins / 60) >= 75 : false;
-  if (z2 && a.avg_hr && fam === "ride" && easy && !hard) {
-    if (a.avg_hr > z2[1]) out.push(["warn", `HR averaged ${Math.round(a.avg_hr)} – above your Z2 cap of ${z2[1]}. Ease the pace on easy days.`]);
-    else if (a.avg_hr >= z2[0]) out.push(["ok", `HR averaged ${Math.round(a.avg_hr)} – inside Z2 (${z2[0]}–${z2[1]}).`]);
+  if (z2 && a.avg_hr && (fam === "ride" || fam === "run") && easy && !hard) {
+    const sport = fam === "run" ? "running " : "";
+    if (a.avg_hr > z2[1]) out.push(["warn", `HR averaged ${Math.round(a.avg_hr)} – above your ${sport}Z2 cap of ${z2[1]}. Ease the pace on easy days.`]);
+    else if (a.avg_hr >= z2[0]) out.push(["ok", `HR averaged ${Math.round(a.avg_hr)} – inside your ${sport}Z2 (${z2[0]}–${z2[1]}).`]);
     else out.push(["info", `HR averaged ${Math.round(a.avg_hr)} – below Z2; fine for recovery.`]);
   }
   if (a.lr_balance != null && fam === "ride") {
@@ -1607,7 +1609,7 @@ function openActivity(id) {
     ${rows(stats)}<h3>Coaching</h3>${flagsHtml(ruleFeedback(a, planned))}
     <div class="note" id="fb"><div class="label">COACH'S FEEDBACK</div><div id="fb-text">${cached ? mdLite(cached)
       : settings.anthropic ? `<p class="typing">Thinking</p>` : `<p class="muted">Add your Anthropic key in Settings for the coach's feedback.</p>`}</div></div>
-    ${cached ? `<button class="secondary" id="fb-again" style="margin-top:10px">Ask again</button>` : ""}
+    <div class="actions" style="margin-top:10px"><button class="primary" id="fb-reply">Reply to the coach</button>${cached ? `<button class="secondary" id="fb-again">Ask again</button>` : ""}</div>
     <h3>File</h3><button class="secondary" id="fit-dl" data-busy style="width:100%">⤓ Download FIT file</button>
     <p class="small muted" style="margin:6px 0 0">The first time takes about a minute; it then opens in your browser to save.</p>`);
   $("#fit-dl").addEventListener("click", () => downloadFit(a));
@@ -1630,6 +1632,18 @@ In at most 110 words, 2–4 bullets starting with "- ": how it went against the 
     }
   };
   $("#fb-again")?.addEventListener("click", ask);
+  // Reply: carry on in the coach chat, quoting what the coach said about this session.
+  $("#fb-reply").addEventListener("click", () => {
+    const said = (store.get(`fb:${a.id}`, "") || "").replace(/\s+/g, " ").trim().slice(0, 700);
+    const what = `${a.name || a.type} on ${dayName(a.date)} (${dur(a.mins / 60)}${a.avg_hr ? `, avg HR ${Math.round(a.avg_hr)}` : ""}${a.avg_w ? `, avg ${Math.round(a.avg_w)} W` : ""})`;
+    closeSheet();
+    show("coach");
+    const input = $("#chat-input");
+    input.value = said ? `About my ${what} – you said: "${said}"\n\nMy reply: ` : `About my ${what}: `;
+    autosize();
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  });
   if (!cached && settings.anthropic) ask();
 }
 
