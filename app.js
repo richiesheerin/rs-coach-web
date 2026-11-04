@@ -925,6 +925,10 @@ coach with haematology knowledge but you are not their clinician: interpret bloo
 training, and say what to raise with their team. No iron, transfusion or hormone (e.g. TRT) advice." : ""} If they describe red-flag symptoms (chest pain, fainting, severe breathlessness, fever, \
 unusual bleeding or bruising), tell them to stop training and get medical advice today.
 
+Each of ${n}'s messages starts with an "[App context]" note giving today's date and time; when the app's data has been \
+refreshed since you last saw it, the note carries the new data, and the newest data always wins over the copy below. \
+Never say you can't see recent data without checking the latest note.
+
 Answer like a good coach on a phone: direct and specific, using their data below (numbers, days, sessions). Short paragraphs or a \
 few bullets, no headings, no greetings. If the data doesn't cover something, say so rather than guessing.
 
@@ -1151,10 +1155,27 @@ function toolCard(b) {
     <ul class="changes">${(b.input.changes || []).map(changeLine).join("")}</ul>${state}</div>`;
 }
 
+// Context the app adds to a message for the coach (date, fresh data): sent, but not shown in the chat.
+const CTX = "[App context]";
+
+function contextBlock() {
+  const now = new Date();
+  const when = now.toLocaleString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  let text = `${CTX} Now: ${when} (phone time).`;
+  const at = report?.generated_at;
+  if (at && at !== (chat.lastData || chat.dataAt)) {
+    // Newer data than this chat has seen: send it, minus the parts that never change.
+    const { gym, lab_markers, food_preferences, coach_models, profile: _p, ...data } = report;
+    text += ` The app's data was refreshed at ${dayName(at)} ${at.slice(11, 16)}; it replaces any earlier data in this chat (the system prompt's copy is from ${dayName(chat.dataAt)}):\n${JSON.stringify({ ...data, activities: (data.activities || []).slice(-30) })}`;
+    chat.lastData = at;
+  }
+  return { type: "text", text };
+}
+
 function msgHtml(m) {
   if (m.role === "user") {
     if (typeof m.content === "string") return `<div class="msg user">${esc(m.content).replace(/\n/g, "<br>")}</div>`;
-    const text = m.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+    const text = m.content.filter((b) => b.type === "text" && !b.text.startsWith(CTX)).map((b) => b.text).join("");
     return text ? `<div class="msg user">${esc(text).replace(/\n/g, "<br>")}</div>` : "";
   }
   const text = chatText(m);
@@ -1215,9 +1236,10 @@ function renderCoach() {
   if (!chat) newChat();
   if (!chat.model) chat.model = modelFor(chat.mode);  // chats saved before models were split
   const log = $("#chat-log");
-  const stale = report && chat.dataAt !== report.generated_at;
+  const seen = chat.lastData || chat.dataAt;
+  const stale = report && seen !== report.generated_at;
   const who = `${chat.mode === "medical" ? "Blood results · " : ""}${modelName(chat.model)}`;
-  let html = `<div class="chat-head"><span class="muted">${esc(who)}<br>${stale ? "New data since this chat started." : chat.dataAt ? `Data from ${dayName(chat.dataAt)} ${chat.dataAt.slice(11, 16)}` : ""}</span>
+  let html = `<div class="chat-head"><span class="muted">${esc(who)}<br>${stale ? "Newer data – the coach gets it with your next message." : seen ? `Coach has data from ${dayName(seen)} ${seen.slice(11, 16)}` : ""}</span>
     <button class="secondary" id="new-chat">New chat</button></div>`;
   if (!settings.anthropic) html += `<div class="msg info">Add your Anthropic API key in Settings (⚙) to ask the coach.</div>`;
   if (!chat.messages.length) html += `<div class="msg info">Ask about training, fuelling, recovery or your goals. The coach sees your brief, this week's plan and your recent data.</div>`;
@@ -1311,11 +1333,13 @@ async function sendChat() {
   chat.decisions ||= {};
   open.forEach((b) => { chat.decisions[b.id] ||= { ok: false, result: "Not applied." }; });
   const results = open.map((b) => ({ type: "tool_result", tool_use_id: b.id, content: `${profile().name} replied instead of confirming; not applied.` }));
-  chat.messages.push({ role: "user", content: results.length ? [...results, { type: "text", text }] : text });
+  const seenBefore = chat.lastData;
+  chat.messages.push({ role: "user", content: [...results, contextBlock(), { type: "text", text }] });
   const sent = chat.messages.length;
   const ok = await continueChat();
   if (!ok && chat.messages.length === sent) {
     chat.messages.pop();  // nothing was answered: drop the unanswered question (the last turn only)
+    chat.lastData = seenBefore;  // its data update wasn't delivered either
     input.value = text;
     store.set("chat", chat);
     renderCoach();
