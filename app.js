@@ -577,6 +577,27 @@ function zone2Card() {
     <p class="small muted" style="margin:4px 0 0">Grey zone = above Zone 2 but not a hard session: adds fatigue without the Zone 2 gain. Keep easy days easy.</p></div>`;
 }
 
+// Easy runs on the usual route: metres per heartbeat (speed for the HR it cost) is the fair comparison, because pace
+// alone changes with effort; pace and distance in 30 min are shown beside it.
+function runsCard() {
+  const r = report.runs;
+  if (!r || !r.runs.length) return "";
+  const list = r.runs, last = list[list.length - 1], band = r.z2_hr_run;
+  const pace = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+  const delta = (c, txt, better) => (c == null ? "" : `<span class="delta ${c === 0 ? "" : (c > 0) === (better === "up") ? "good" : "bad"}">${c > 0 ? "▲" : c < 0 ? "▼" : "■"} ${txt}</span>`);
+  const inZ2 = (hr) => band && hr != null && hr >= band[0] && hr <= band[1];
+  const rowsHtml = [...list].reverse().slice(0, 6).map((x) => `<tr><td>${shortDate(x.date)}</td><td>${x.km.toFixed(2)} km · ${x.mins} min</td>
+    <td>${pace(x.pace_s_km)}/km</td><td class="${inZ2(x.avg_hr) ? "z2ok" : ""}">${x.avg_hr ?? "–"}</td><td>${x.m_per_beat != null ? x.m_per_beat.toFixed(2) : "–"}</td></tr>`).join("");
+  return `<div class="card"><h2>Easy runs</h2>
+    <p class="small muted" style="margin:0 0 8px">Same route, same effort: covering more ground for each heartbeat is the run fitness growing. Pace alone moves with how hard you went.</p>
+    <div class="stat">
+      <div><span class="small muted">Metres per heartbeat</span><b>${last.m_per_beat != null ? last.m_per_beat.toFixed(2) : "–"}</b>${delta(r.m_per_beat_change, `${Math.abs(r.m_per_beat_change ?? 0).toFixed(2)}`, "up")}${spark(list.map((x) => x.m_per_beat), { w: 120, h: 30 })}</div>
+      <div><span class="small muted">Last run</span><b>${pace(last.pace_s_km)}<small>/km</small></b><small class="muted">${last.km_30min.toFixed(2)} km per 30 min · HR ${last.avg_hr ?? "–"}</small></div>
+    </div>
+    <table class="rows runs" style="margin-top:8px"><tr class="muted small"><td>Date</td><td>Distance</td><td>Pace</td><td>HR</td><td>m/beat</td></tr>${rowsHtml}</table>
+    ${band ? `<p class="small muted" style="margin:6px 0 0">HR in green = inside your running Zone 2 (${band[0]}–${band[1]}). Steady 20–45 min runs only; races, track and intervals are left out. ${r.trend_basis === "zone2" ? "The trend compares your Zone 2 runs." : `The trend compares all steady runs until there are 4 in Zone 2 (${r.z2_runs} so far).`}</p>` : ""}</div>`;
+}
+
 function lrTile(g, wk) {
   // Left share of power by week, against his usual split. Shown as a trend to watch, never as a 50/50 target.
   const lp = g.left_pct || {}, base = g.lr_baseline_left, left = lp.latest;
@@ -861,7 +882,7 @@ function renderTrends() {
     ...(profile().medical ? [{ id: "c-hb", title: "Haemoglobin (g/L)", series: [{ name: "Hb", color: css("--s1"), points: pointsOf(report.labs || [], "hb", "date") }], unit: " g/L" }] : []),
   ];
   const eff = report.efficiency;
-  let html = leuvenHero() + zone2Card() + walkingCard();
+  let html = leuvenHero() + zone2Card() + runsCard() + walkingCard();
   html += `<div class="card"><h2>Watts per heartbeat</h2>${eff
     ? `<div class="stat"><div><span class="small muted">Last 14 days vs 4 weeks before</span><b>${signed(eff.change_pct, 0)}%</b></div></div>
        <p class="small muted">Steady rides${kickrPct() ? ", KICKR corrected to Favero (rides with left/right data are already Favero)" : ""}. A drop means the same power costs more heart rate – fatigue, illness, heat, or lower Hb.</p>`
@@ -1451,6 +1472,10 @@ function renderLog() {
     <div><label for="l-fer">Ferritin (µg/L)</label><input id="l-fer" type="number" inputmode="decimal" step="1"></div></div>
     <div class="row"><div><label for="l-plt">Platelets (×10⁹/L)</label><input id="l-plt" type="number" inputmode="decimal" step="1"></div>
     <div><label for="l-neu">Neutrophils (×10⁹/L)</label><input id="l-neu" type="number" inputmode="decimal" step="0.1"></div></div>
+    <details class="more-labs"><summary>More markers</summary><div class="lab-grid">${Object.entries(report?.lab_markers || {})
+      .filter(([k]) => !["hb", "ferritin", "platelets", "neutrophils"].includes(k))
+      .map(([k, m]) => `<div><label for="l-${k}">${esc(m.label)} (${esc(m.unit)})</label><input id="l-${k}" data-lab="${k}" type="number" inputmode="decimal" step="any"></div>`).join("")}</div></details>
+    <p class="small muted" style="margin:6px 0 10px">Results arriving over several days? Use the same test date each time – they're added to that day's results.</p>
     <button class="primary" data-busy>Save results</button></form></div>` : ""}
 
   <div class="card"><h2>Update now</h2><p class="small muted">Fetches your latest rides, wellness and calendar from intervals.icu and rebuilds the coach's note (about a minute, no email).</p>
@@ -1485,7 +1510,8 @@ function renderLog() {
     e.preventDefault();
     const hb = $("#l-hb").value, inputs = { date: $("#l-date").value, hb, ferritin: $("#l-fer").value, platelets: $("#l-plt").value, neutrophils: $("#l-neu").value };
     if (hb && +hb < 25) { status(`Hb ${esc(hb)} looks like g/dL – enter g/L (e.g. ${Math.round(hb * 10)}).`, "err"); return; }
-    if (![inputs.hb, inputs.ferritin, inputs.platelets, inputs.neutrophils].some(Boolean)) { status("Enter at least one result.", "err"); return; }
+    inputs.more = $$("[data-lab]", v).filter((x) => x.value.trim()).map((x) => `${x.dataset.lab}=${x.value.trim()}`).join(" ");
+    if (![inputs.hb, inputs.ferritin, inputs.platelets, inputs.neutrophils, inputs.more].some(Boolean)) { status("Enter at least one result.", "err"); return; }
     if (await runWorkflow("labs", inputs, "Blood results")) show("trends");
   });
   $("#b-refresh").addEventListener("click", () => runWorkflow("refresh", { mode: "refresh" }, "Update"));
