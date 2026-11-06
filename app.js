@@ -950,9 +950,11 @@ function renderTrends() {
 }
 
 // Latest blood results against the lab's ranges, each with its history as a sparkline.
-const LAB_GROUPS = [["Blood count", ["hb", "haematocrit", "platelets", "wbc", "neutrophils", "lymphocytes", "rdw"]],
-  ["Chemistry", ["ldh", "ast", "alt", "creatinine", "crp", "urate", "albumin", "ferritin"]],
-  ["Immunity & hormones", ["igg", "testosterone", "fsh", "lh"]]];
+const LAB_GROUPS = [["Blood count", ["hb", "haematocrit", "rbc", "platelets", "wbc", "neutrophils", "lymphocytes", "monocytes", "eosinophils", "basophils", "mcv", "mch", "mchc", "rdw"]],
+  ["Liver & muscle", ["ldh", "ast", "alt", "alp", "ggt", "bilirubin", "albumin"]],
+  ["Kidney & salts", ["creatinine", "urea", "sodium", "potassium", "chloride", "bicarbonate", "calcium", "adj_calcium", "phosphate", "magnesium", "urate"]],
+  ["Inflammation & iron", ["crp", "ferritin"]],
+  ["Immunity & hormones", ["igg", "testosterone", "free_testosterone", "shbg", "lh", "fsh", "prolactin", "cortisol"]]];
 
 function labsCard() {
   const labs = report.labs || [], M = report.lab_markers || {};
@@ -962,9 +964,9 @@ function labsCard() {
   const row = (k) => {
     const m = M[k], r = latestOf(k);
     if (!m || !r) return "";
-    const v = r[k], tag = v > m.hi ? "high" : v < m.lo ? "low" : "";
+    const v = r[k], tag = m.hi != null && v > m.hi ? "high" : m.lo != null && v < m.lo ? "low" : "";
     const old = r.date !== last.date ? ` <em>${shortDate(r.date)}${r.note ? ` · ${esc(r.note)}` : ""}</em>` : "";
-    return `<tr class="${tag}"><td>${esc(m.label)}${old}</td><td><b>${v}</b> <small>${esc(m.unit)}</small>${tag ? ` <span class="ltag">${tag.toUpperCase()}</span>` : ""}<br><small class="muted">range ${m.lo}–${m.hi}</small></td><td class="lspark">${spark(labs.map((x) => (typeof x[k] === "number" ? x[k] : null)), { w: 90, h: 26 })}</td></tr>`;
+    return `<tr class="${tag}"><td>${esc(m.label)}${old}</td><td><b>${v}</b> <small>${esc(m.unit)}</small>${tag ? ` <span class="ltag">${tag.toUpperCase()}</span>` : ""}<br><small class="muted">${m.lo != null ? `range ${m.lo}–${m.hi}` : "no range given"}</small></td><td class="lspark">${spark(labs.map((x) => (typeof x[k] === "number" ? x[k] : null)), { w: 90, h: 26 })}</td></tr>`;
   };
   const para = [...labs].reverse().find((r) => r.paraprotein);
   return `<div class="card"><h2>Blood results</h2><p class="small muted">Latest ${dayName(last.date)} ${last.date.slice(0, 4)}${last.note ? ` (${esc(last.note)})` : ""} · ${labs.length} results since ${shortDate(labs[0].date)} ${labs[0].date.slice(0, 4)}. Lines show each marker's history.</p>
@@ -1504,16 +1506,12 @@ function renderLog() {
     <button class="primary" data-busy>Save check-in</button></form></div>
 
   ${profile().medical ? `<div class="card"><h2>Blood results</h2><form class="log" id="f-labs">
+    <label for="l-text">Paste your results</label>
+    <textarea id="l-text" rows="8" placeholder="Paste them as the hospital lists them, e.g.&#10;Full Blood Count (3 Nov 2026)&#10;- Haemoglobin: 143 g/L&#10;- Neutrophils: 1.86 x 10^9/L (Low)&#10;- ALT (Alanine Aminotransferase): 44 U/L (High)"></textarea>
     <label for="l-date">Test date</label><input id="l-date" type="date" value="${today}" max="${today}">
-    <div class="row"><div><label for="l-hb">Hb (g/L)</label><input id="l-hb" type="number" inputmode="decimal" step="1" placeholder="e.g. 128"></div>
-    <div><label for="l-fer">Ferritin (µg/L)</label><input id="l-fer" type="number" inputmode="decimal" step="1"></div></div>
-    <div class="row"><div><label for="l-plt">Platelets (×10⁹/L)</label><input id="l-plt" type="number" inputmode="decimal" step="1"></div>
-    <div><label for="l-neu">Neutrophils (×10⁹/L)</label><input id="l-neu" type="number" inputmode="decimal" step="0.1"></div></div>
-    <details class="more-labs"><summary>More markers</summary><div class="lab-grid">${Object.entries(report?.lab_markers || {})
-      .filter(([k]) => !["hb", "ferritin", "platelets", "neutrophils"].includes(k))
-      .map(([k, m]) => `<div><label for="l-${k}">${esc(m.label)} (${esc(m.unit)})</label><input id="l-${k}" data-lab="${k}" type="number" inputmode="decimal" step="any"></div>`).join("")}</div></details>
-    <p class="small muted" style="margin:6px 0 10px">Results arriving over several days? Use the same test date each time – they're added to that day's results.</p>
-    <button class="primary" data-busy>Save results</button></form></div>` : ""}
+    <div id="l-preview"></div>
+    <div class="actions" style="margin-top:10px"><button type="button" class="secondary" id="l-check">Check</button><button class="primary" id="l-save" data-busy disabled>Save results</button></div>
+    <p class="small muted" style="margin:6px 0 0">Results for the same test date are added to that day's, so you can paste each batch as it arrives.</p></form></div>` : ""}
 
   <div class="card"><h2>Update now</h2><p class="small muted">Fetches your latest rides, wellness and calendar from intervals.icu and rebuilds the coach's note (about a minute, no email).</p>
     <button class="primary" id="b-refresh" data-busy style="width:100%">Update now</button></div>`;
@@ -1543,15 +1541,87 @@ function renderLog() {
     if (!Object.values(inputs).some(Boolean)) { status("Pick at least one score or add a note.", "err"); return; }
     if (await runWorkflow("checkin", inputs, "Check-in")) { store.set("checkinDate", today); show("today"); }
   });
+  let parsed = null;
+  const check = () => {
+    parsed = parseLabs($("#l-text").value);
+    if (parsed.date) $("#l-date").value = parsed.date;
+    const M = report?.lab_markers || {};
+    const keys = Object.keys(parsed.values);
+    $("#l-preview").innerHTML = !keys.length ? `<p class="small" style="color:var(--z4)">No results recognised – paste lines like "Haemoglobin: 143 g/L".</p>`
+      : `<p class="small" style="margin:8px 0 4px"><b>${keys.length} results</b> for ${dayName($("#l-date").value)}${parsed.date ? " (date from the text)" : ""}:</p>
+         <table class="rows labs-preview">${keys.map((k) => { const m = M[k] || { label: k, unit: "" }, v = parsed.values[k];
+           const tag = m.hi != null && v > m.hi ? "HIGH" : m.lo != null && v < m.lo ? "LOW" : "";
+           return `<tr><td>${esc(m.label)}</td><td><b>${v}</b> <small>${esc(m.unit)}</small>${tag ? ` <span class="ltag">${tag}</span>` : ""}</td></tr>`; }).join("")}</table>
+         ${parsed.skipped.length ? `<p class="small muted" style="margin:6px 0 0">Not saved (not tracked, or no number): ${esc(parsed.skipped.join(", "))}</p>` : ""}
+         ${parsed.problems.length ? `<p class="small" style="color:var(--z4);margin:6px 0 0">${esc(parsed.problems.join(" "))}</p>` : ""}`;
+    $("#l-save").disabled = !keys.length || parsed.problems.length > 0;
+    $("#l-save").textContent = keys.length ? `Save ${keys.length} results` : "Save results";
+  };
+  $("#l-check")?.addEventListener("click", check);
+  $("#l-text")?.addEventListener("input", () => { $("#l-save").disabled = true; });
   $("#f-labs")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const hb = $("#l-hb").value, inputs = { date: $("#l-date").value, hb, ferritin: $("#l-fer").value, platelets: $("#l-plt").value, neutrophils: $("#l-neu").value };
-    if (hb && +hb < 25) { status(`Hb ${esc(hb)} looks like g/dL – enter g/L (e.g. ${Math.round(hb * 10)}).`, "err"); return; }
-    inputs.more = $$("[data-lab]", v).filter((x) => x.value.trim()).map((x) => `${x.dataset.lab}=${x.value.trim()}`).join(" ");
-    if (![inputs.hb, inputs.ferritin, inputs.platelets, inputs.neutrophils, inputs.more].some(Boolean)) { status("Enter at least one result.", "err"); return; }
-    if (await runWorkflow("labs", inputs, "Blood results")) show("trends");
+    check();
+    if (!parsed || !Object.keys(parsed.values).length || parsed.problems.length) return;
+    const more = Object.entries(parsed.values).map(([k, v]) => `${k}=${v}`).join(" ");
+    if (await runWorkflow("labs", { date: $("#l-date").value, more }, "Blood results")) show("trends");
   });
   $("#b-refresh").addEventListener("click", () => runWorkflow("refresh", { mode: "refresh" }, "Update"));
+}
+
+// ---------- pasted blood results ----------
+// Marker names as hospitals print them → the app's keys. More specific names first ("free testosterone" before
+// "testosterone", "adjusted calcium" before "calcium").
+const LAB_ALIASES = [
+  ["free_testosterone", ["free testosterone"]], ["testosterone", ["total testosterone", "testosterone"]],
+  ["adj_calcium", ["adjusted calcium", "corrected calcium"]], ["calcium", ["calcium"]],
+  ["hb", ["haemoglobin", "hemoglobin", "hgb", "hb"]], ["haematocrit", ["haematocrit", "hematocrit", "hct", "pcv"]],
+  ["rbc", ["red blood cells", "red cell count", "rbc"]], ["wbc", ["white blood cells", "white cell count", "wbc"]],
+  ["neutrophils", ["neutrophils"]], ["lymphocytes", ["lymphocytes"]], ["monocytes", ["monocytes"]],
+  ["eosinophils", ["eosinophils"]], ["basophils", ["basophils"]], ["platelets", ["platelet count", "platelets", "plt"]],
+  ["mchc", ["mchc"]], ["mch", ["mch"]], ["mcv", ["mcv"]], ["rdw", ["rdw"]],
+  ["sodium", ["sodium"]], ["potassium", ["potassium"]], ["chloride", ["chloride"]], ["bicarbonate", ["bicarbonate"]],
+  ["urea", ["urea"]], ["creatinine", ["creatinine"]], ["phosphate", ["phosphate"]], ["magnesium", ["magnesium"]],
+  ["alp", ["alkaline phosphatase", "alp"]], ["alt", ["alanine aminotransferase", "alt"]],
+  ["ast", ["aspartate aminotransferase", "ast"]], ["ggt", ["gamma glutamyl transferase", "gamma-glutamyl transferase", "ggt"]],
+  ["ldh", ["lactate dehydrogenase", "ldh"]], ["albumin", ["serum albumin", "albumin"]], ["bilirubin", ["total bilirubin", "bilirubin"]],
+  ["crp", ["c-reactive protein", "c reactive protein", "crp"]], ["ferritin", ["ferritin"]], ["urate", ["uric acid", "urate"]],
+  ["igg", ["immunoglobulin g", "igg"]], ["fsh", ["follicle stimulating hormone", "fsh"]],
+  ["lh", ["luteinising hormone", "luteinizing hormone", "lh"]], ["prolactin", ["prolactin"]],
+  ["shbg", ["sex hormone binding globulin", "shbg"]], ["cortisol", ["cortisol"]],
+];
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+function parseLabs(text) {
+  const values = {}, skipped = [], problems = [];
+  let date = null;
+  for (const raw of String(text).split(/\n/)) {
+    const line = raw.replace(/^[\s•*-]+/, "").trim();
+    if (!line) continue;
+    if (!date) {  // the first date anywhere: "3 Nov 2026", "2026-11-03" or "03/11/2026"
+      let m = line.match(/\b(\d{1,2})\s+([A-Za-z]{3})[a-z]*\.?\s+(\d{4})\b/);
+      if (m && MONTHS.includes(m[2].toLowerCase())) date = `${m[3]}-${String(MONTHS.indexOf(m[2].toLowerCase()) + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+      else if ((m = line.match(/\b(\d{4})-(\d{2})-(\d{2})\b/))) date = m[0];
+      else if ((m = line.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/))) date = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    }
+    let cut = line.search(/:|\t|\s{2,}/), loose = false;
+    if (cut < 0) {  // "FSH 13.3 IU/L": no separator, the name runs up to the first number
+      cut = line.search(/\s[<>]?\d/);
+      loose = true;
+      if (cut < 0) continue;  // a heading, not a result
+    }
+    const name = line.slice(0, cut).toLowerCase(), rest = line.slice(cut + 1).trim();
+    const num = rest.match(/^[<>]?\s*(-?\d+(?:\.\d+)?)/);
+    const words = ` ${name.replace(/[()]/g, " ").replace(/\s+/g, " ")} `;
+    const hit = LAB_ALIASES.find(([, names]) => names.some((n) => words.includes(` ${n} `)));
+    if (!hit || !num || /^[<>]/.test(rest)) { if (!loose) skipped.push(line.slice(0, cut).trim()); continue; }
+    let v = parseFloat(num[1]);
+    const key = hit[0];
+    if (key === "hb" && v < 25) problems.push(`Hb ${v} looks like g/dL – the app needs g/L (${Math.round(v * 10)}).`);
+    if (key === "haematocrit" && v > 1) v = Math.round(v * 10) / 1000;  // given as % (42.4) → L/L (0.424)
+    if (!(key in values)) values[key] = v;
+  }
+  return { date, values, skipped, problems };
 }
 
 // ---------- settings ----------

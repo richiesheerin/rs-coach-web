@@ -416,9 +416,6 @@ table.rows.nextweek .delta { font-size: 12px; font-weight: 700; }
 .steps-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; }
 .steps-head b { font-size: 18px; } .steps-head b small { font-size: 12px; font-weight: 500; color: var(--muted); }
 
-/* Log → Blood results: more markers */
-.more-labs { margin-top: 8px; } .more-labs summary { cursor: pointer; font-weight: 600; font-size: 14px; padding: 6px 0; }
-.lab-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
 
 /* Easy runs card */
 table.rows.runs td { font-size: 13px; padding: 5px 4px 5px 0; text-align: left; }
@@ -429,3 +426,8 @@ table.rows.runs td.z2ok { color: var(--z2); font-weight: 700; }
 table.rows.dur td { font-size: 13px; text-align: left; padding: 6px 6px 6px 0; vertical-align: top; }
 table.rows.dur td:last-child { text-align: right; }
 .lrrow .gsub { margin-left: 2px; }
+
+/* Pasted blood results preview */
+#l-text { width: 100%; font: inherit; font-size: 14px; }
+table.rows.labs-preview td { font-size: 13px; padding: 3px 0; text-align: left; }
+table.rows.labs-preview td:last-child { text-align: right; }
