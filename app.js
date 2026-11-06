@@ -548,6 +548,7 @@ function leuvenHero() {
       ${tile("BEST 20 MIN", g.p20.latest, " W", g.p20.change, wk.map((x) => x.p20_4wk), "up", kickrPct() ? "4-week best, Favero scale" : "4-week best")}
       ${tile("WEIGHT", kg, " kg", g.weight.change, wk.map((x) => x.weight), g.weight_goal === "gain" ? "up" : "down", `target ${g.target_weight} kg`)}
       ${g.show_tt === false ? "" : `<div class="gtile"><span class="glabel">${g.tt_distance_km} KM TT ESTIMATE</span><b>${ttLatest ?? "–"}</b>${ttChange != null ? `<span class="delta ${ttChange < 0 ? "good" : ttChange > 0 ? "bad" : ""}">${ttChange < 0 ? "▼" : ttChange > 0 ? "▲" : "■"} ${Math.abs(ttChange)} s</span>` : ""}${spark(wk.map((x) => x.tt_secs))}<small class="gsub">flat, still air, from 20-min power</small></div>`}
+      ${cpTile()}
       ${lrTile(g, wk)}
     </div>
     <p class="gnote">Changes compare the last 4 weeks with the 4 before.${kickrPct() ? ` KICKR efforts (Zwift rides without the pedals' left/right data) are corrected −${kickrPct()}% to the Favero scale.` : ""}</p></section>`;
@@ -596,6 +597,42 @@ function runsCard() {
     </div>
     <table class="rows runs" style="margin-top:8px"><tr class="muted small"><td>Date</td><td>Distance</td><td>Pace</td><td>HR</td><td>m/beat</td></tr>${rowsHtml}</table>
     ${band ? `<p class="small muted" style="margin:6px 0 0">HR in green = inside your running Zone 2 (${band[0]}–${band[1]}). Steady 20–45 min runs only; races, track and intervals are left out. ${r.trend_basis === "zone2" ? "The trend compares your Zone 2 runs." : `The trend compares all steady runs until there are 4 in Zone 2 (${r.z2_runs} so far).`}</p>` : ""}</div>`;
+}
+
+// ---------- Vekta: critical power, durability, climbs ----------
+function cpTile() {
+  const v = report.vekta;
+  if (!v || v.critical_power == null) return "";
+  const ch = v.cp_12wk_ago != null ? v.critical_power - v.cp_12wk_ago : null;
+  const delta = ch == null ? "" : `<span class="delta ${ch > 0 ? "good" : ch < 0 ? "bad" : ""}">${ch > 0 ? "▲" : ch < 0 ? "▼" : "■"} ${Math.abs(ch)} W in 12 wk</span>`;
+  return `<div class="gtile wide"><span class="glabel">CRITICAL POWER · VEKTA</span>
+    <div class="lrrow"><b>${v.critical_power}<small> W</small></b>${v.cp_w_kg ? `<span class="gsub">${v.cp_w_kg} W/kg</span>` : ""}${delta}</div>
+    ${spark((v.cp_weeks || []).map((w) => w.value))}
+    <small class="gsub">W′ ${v.w_prime != null ? (v.w_prime / 1000).toFixed(1) : "–"} kJ · VO₂max ${v.vo2max ?? "–"} · max ${v.max_power ?? "–"} W – Vekta's model from all your rides</small></div>`;
+}
+
+function durabilityCard() {
+  const d = report.vekta?.durability || [];
+  if (!report.vekta) return "";
+  const tests = d.filter((x) => x.test);
+  const rows_ = [...d].reverse().map((x) => `<tr><td>${shortDate(x.date)}<br><span class="small muted">${x.hours} h · ${x.kj ?? "–"} kJ</span></td>
+    <td>${x.fresh_w} W → ${x.after[String(x.deepest_kj_kg)]} W<br><span class="small muted">20 min fresh → after ${x.deepest_kj_kg} kJ/kg</span></td>
+    <td><b>${x.kept_pct}%</b>${x.test ? `<br><span class="stag done">TEST</span>` : ""}</td></tr>`).join("");
+  return `<div class="card"><h2>Durability</h2>
+    <p class="small muted" style="margin:0 0 6px">How much of your best 20-min power is left after hours of riding – what decides Calpe's third day. Vekta compares your best 20 min fresh with your best after each 10 kJ per kg of work.</p>
+    ${d.length ? `<table class="rows dur">${rows_}</table>` : `<p class="small muted">No long rides yet in the last 8 weeks.</p>`}
+    <p class="small" style="margin:8px 0 0">${tests.length ? `Latest test: <b>${tests[tests.length - 1].kept_pct}%</b> kept after ${tests[tests.length - 1].deepest_kj_kg} kJ/kg.`
+      : `None of these is a real test yet: the late efforts were steady Zone 2, not hard. A test is a hard 20 min (near critical power) after 2–2½ h – the build phase will add one each month.`}</p></div>`;
+}
+
+function climbsCard() {
+  const c = report.vekta?.climbs || [];
+  if (!c.length) return "";
+  const rows_ = [...c].reverse().slice(0, 6).map((x) => `<tr><td>${shortDate(x.date)}${x.virtual ? ` <span class="small muted">Zwift</span>` : ""}</td>
+    <td>${x.mins} min · ${x.km} km · ${x.grade ?? "–"}%</td><td>${x.watts ?? "–"} W<br><span class="small muted">${x.w_kg ?? "–"} W/kg · HR ${x.hr ?? "–"}</span></td></tr>`).join("");
+  return `<div class="card"><h2>Climbs</h2>
+    <p class="small muted" style="margin:0 0 6px">Climbs of 3+ min that Vekta found in your rides. Calpe's are 20–40 min (Rates, Confrides): watch your W/kg on the long ones rise as weight comes down.</p>
+    <table class="rows dur">${rows_}</table></div>`;
 }
 
 function lrTile(g, wk) {
@@ -882,7 +919,7 @@ function renderTrends() {
     ...(profile().medical ? [{ id: "c-hb", title: "Haemoglobin (g/L)", series: [{ name: "Hb", color: css("--s1"), points: pointsOf(report.labs || [], "hb", "date") }], unit: " g/L" }] : []),
   ];
   const eff = report.efficiency;
-  let html = leuvenHero() + zone2Card() + runsCard() + walkingCard();
+  let html = leuvenHero() + zone2Card() + durabilityCard() + climbsCard() + runsCard() + walkingCard();
   html += `<div class="card"><h2>Watts per heartbeat</h2>${eff
     ? `<div class="stat"><div><span class="small muted">Last 14 days vs 4 weeks before</span><b>${signed(eff.change_pct, 0)}%</b></div></div>
        <p class="small muted">Steady rides${kickrPct() ? ", KICKR corrected to Favero (rides with left/right data are already Favero)" : ""}. A drop means the same power costs more heart rate – fatigue, illness, heat, or lower Hb.</p>`

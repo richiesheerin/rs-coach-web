@@ -424,3 +424,8 @@ table.rows.nextweek .delta { font-size: 12px; font-weight: 700; }
 table.rows.runs td { font-size: 13px; padding: 5px 4px 5px 0; text-align: left; }
 table.rows.runs td:last-child { text-align: right; }
 table.rows.runs td.z2ok { color: var(--z2); font-weight: 700; }
+
+/* Vekta: durability and climbs tables */
+table.rows.dur td { font-size: 13px; text-align: left; padding: 6px 6px 6px 0; vertical-align: top; }
+table.rows.dur td:last-child { text-align: right; }
+.lrrow .gsub { margin-left: 2px; }
