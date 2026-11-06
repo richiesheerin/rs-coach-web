@@ -1543,28 +1543,31 @@ function renderLog() {
     if (await runWorkflow("checkin", inputs, "Check-in")) { store.set("checkinDate", today); show("today"); }
   });
   let parsed = null;
+  const count = () => parsed.sections.reduce((n, s) => n + Object.keys(s.values).length, 0);
   const check = () => {
     parsed = parseLabs($("#l-text").value);
     if (parsed.date) $("#l-date").value = parsed.date;
     const M = report?.lab_markers || {};
-    const keys = Object.keys(parsed.values);
-    $("#l-preview").innerHTML = !keys.length ? `<p class="small" style="color:var(--z4)">No results recognised – paste lines like "Haemoglobin: 143 g/L".</p>`
-      : `<p class="small" style="margin:8px 0 4px"><b>${keys.length} results</b> for ${dayName($("#l-date").value)}${parsed.date ? " (date from the text)" : ""}:</p>
-         <table class="rows labs-preview">${keys.map((k) => { const m = M[k] || { label: k === "paraprotein" ? "Paraprotein" : k, unit: "" }, v = parsed.values[k];
-           const tag = typeof v === "number" && m.hi != null && v > m.hi ? "HIGH" : typeof v === "number" && m.lo != null && v < m.lo ? "LOW" : "";
-           return `<tr><td>${esc(m.label)}</td><td><b>${v}</b> <small>${esc(m.unit)}</small>${tag ? ` <span class="ltag">${tag}</span>` : ""}</td></tr>`; }).join("")}</table>
+    const n = count(), several = parsed.sections.length > 1;
+    $("#l-date").disabled = several;  // each section's own date is used
+    const table = (vals) => `<table class="rows labs-preview">${Object.keys(vals).map((k) => { const m = M[k] || { label: k === "paraprotein" ? "Paraprotein" : k, unit: "" }, v = vals[k];
+      const tag = typeof v === "number" && m.hi != null && v > m.hi ? "HIGH" : typeof v === "number" && m.lo != null && v < m.lo ? "LOW" : "";
+      return `<tr><td>${esc(m.label)}</td><td><b>${esc(v)}</b> <small>${esc(m.unit)}</small>${tag ? ` <span class="ltag">${tag}</span>` : ""}</td></tr>`; }).join("")}</table>`;
+    $("#l-preview").innerHTML = !n ? `<p class="small" style="color:var(--z4)">No results recognised – paste lines like "Haemoglobin: 143 g/L".</p>`
+      : `${parsed.sections.map((s) => `<p class="small" style="margin:10px 0 4px"><b>${Object.keys(s.values).length} results</b> for ${dayName(s.date || $("#l-date").value)} ${String(s.date || $("#l-date").value).slice(0, 4)}${s.date ? "" : " (the test date above)"}:</p>${table(s.values)}`).join("")}
          ${parsed.skipped.length ? `<p class="small muted" style="margin:6px 0 0">Not saved (not tracked, or no number): ${esc(parsed.skipped.join(", "))}</p>` : ""}
          ${parsed.problems.length ? `<p class="small" style="color:var(--z4);margin:6px 0 0">${esc(parsed.problems.join(" "))}</p>` : ""}`;
-    $("#l-save").disabled = !keys.length || parsed.problems.length > 0;
-    $("#l-save").textContent = keys.length ? `Save ${keys.length} results` : "Save results";
+    $("#l-save").disabled = !n || parsed.problems.length > 0;
+    $("#l-save").textContent = n ? `Save ${n} results${several ? ` (${parsed.sections.length} dates)` : ""}` : "Save results";
   };
   $("#l-check")?.addEventListener("click", check);
   $("#l-text")?.addEventListener("input", () => { $("#l-save").disabled = true; });
   $("#f-labs")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     check();
-    if (!parsed || !Object.keys(parsed.values).length || parsed.problems.length) return;
-    const more = Object.entries(parsed.values).map(([k, v]) => `${k}=${String(v).replace(/[\s=,]+/g, "_")}`).join(" ");
+    if (!parsed || !count() || parsed.problems.length) return;
+    const pairs = (vals) => Object.entries(vals).map(([k, v]) => `${k}=${String(v).replace(/[\s=,]+/g, "_")}`).join(" ");
+    const more = parsed.sections.map((s) => `@${s.date || $("#l-date").value} ${pairs(s.values)}`).join(" ");
     if (await runWorkflow("labs", { date: $("#l-date").value, more }, "Blood results")) show("trends");
   });
   $("#b-refresh").addEventListener("click", () => runWorkflow("refresh", { mode: "refresh" }, "Update"));
@@ -1599,16 +1602,20 @@ const LAB_ALIASES = [
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
 function parseLabs(text) {
-  const values = {}, skipped = [], problems = [];
-  let date = null, lastText = null;
+  const sections = [], skipped = [], problems = [];
+  let date = null, lastText = null, values = {};
   for (const raw of String(text).split(/\n/)) {
     const line = raw.replace(/^[\s•*-]+/, "").trim();
     if (!line) continue;
-    if (!date) {  // the first date anywhere: "3 Nov 2026", "2026-11-03" or "03/11/2026"
-      let m = line.match(/\b(\d{1,2})\s+([A-Za-z]{3})[a-z]*\.?\s+(\d{4})\b/);
-      if (m && MONTHS.includes(m[2].toLowerCase())) date = `${m[3]}-${String(MONTHS.indexOf(m[2].toLowerCase()) + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}`;
-      else if ((m = line.match(/\b(\d{4})-(\d{2})-(\d{2})\b/))) date = m[0];
-      else if ((m = line.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/))) date = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    {  // a date on the line ("3 Nov 2026", "2026-11-03", "03/11/2026") starts a new test date
+      let m = line.match(/\b(\d{1,2})\s+([A-Za-z]{3})[a-z]*\.?\s+(\d{4})\b/), d = null;
+      if (m && MONTHS.includes(m[2].toLowerCase())) d = `${m[3]}-${String(MONTHS.indexOf(m[2].toLowerCase()) + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+      else if ((m = line.match(/\b(\d{4})-(\d{2})-(\d{2})\b/))) d = m[0];
+      else if ((m = line.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/))) d = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+      if (d) {
+        if (Object.keys(values).length) { sections.push({ date, values }); values = {}; }
+        date = d;
+      }
     }
     let cut = line.search(/:|\t|\s{2,}/), loose = false;
     if (cut < 0) {  // "FSH 13.3 IU/L": no separator, the name runs up to the first number
@@ -1637,7 +1644,15 @@ function parseLabs(text) {
     if (key === "haematocrit" && v > 1) v = Math.round(v * 10) / 1000;  // given as % (42.4) → L/L (0.424)
     if (!(key in values)) values[key] = v;
   }
-  return { date, values, skipped, problems };
+  if (Object.keys(values).length) sections.push({ date, values });
+  // Same date twice (a heading repeated): merge
+  const merged = [];
+  for (const s of sections) {
+    const same = merged.find((x) => x.date === s.date);
+    if (same) Object.assign(same.values, s.values); else merged.push(s);
+  }
+  const all = Object.assign({}, ...merged.map((s) => s.values));
+  return { date: merged[0]?.date ?? null, sections: merged, values: all, skipped, problems };
 }
 
 // ---------- settings ----------
