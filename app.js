@@ -954,7 +954,8 @@ const LAB_GROUPS = [["Blood count", ["hb", "haematocrit", "rbc", "platelets", "w
   ["Liver & muscle", ["ldh", "ast", "alt", "alp", "ggt", "bilirubin", "albumin"]],
   ["Kidney & salts", ["creatinine", "urea", "sodium", "potassium", "chloride", "bicarbonate", "calcium", "adj_calcium", "phosphate", "magnesium", "urate"]],
   ["Inflammation & iron", ["crp", "ferritin"]],
-  ["Immunity & hormones", ["igg", "testosterone", "free_testosterone", "shbg", "lh", "fsh", "prolactin", "cortisol"]]];
+  ["Myeloma markers", ["kappa_flc", "lambda_flc", "flc_ratio", "total_protein", "globulin", "igg", "iga", "igm"]],
+  ["Hormones", ["testosterone", "free_testosterone", "shbg", "lh", "fsh", "prolactin", "cortisol"]]];
 
 function labsCard() {
   const labs = report.labs || [], M = report.lab_markers || {};
@@ -1549,8 +1550,8 @@ function renderLog() {
     const keys = Object.keys(parsed.values);
     $("#l-preview").innerHTML = !keys.length ? `<p class="small" style="color:var(--z4)">No results recognised – paste lines like "Haemoglobin: 143 g/L".</p>`
       : `<p class="small" style="margin:8px 0 4px"><b>${keys.length} results</b> for ${dayName($("#l-date").value)}${parsed.date ? " (date from the text)" : ""}:</p>
-         <table class="rows labs-preview">${keys.map((k) => { const m = M[k] || { label: k, unit: "" }, v = parsed.values[k];
-           const tag = m.hi != null && v > m.hi ? "HIGH" : m.lo != null && v < m.lo ? "LOW" : "";
+         <table class="rows labs-preview">${keys.map((k) => { const m = M[k] || { label: k === "paraprotein" ? "Paraprotein" : k, unit: "" }, v = parsed.values[k];
+           const tag = typeof v === "number" && m.hi != null && v > m.hi ? "HIGH" : typeof v === "number" && m.lo != null && v < m.lo ? "LOW" : "";
            return `<tr><td>${esc(m.label)}</td><td><b>${v}</b> <small>${esc(m.unit)}</small>${tag ? ` <span class="ltag">${tag}</span>` : ""}</td></tr>`; }).join("")}</table>
          ${parsed.skipped.length ? `<p class="small muted" style="margin:6px 0 0">Not saved (not tracked, or no number): ${esc(parsed.skipped.join(", "))}</p>` : ""}
          ${parsed.problems.length ? `<p class="small" style="color:var(--z4);margin:6px 0 0">${esc(parsed.problems.join(" "))}</p>` : ""}`;
@@ -1563,7 +1564,7 @@ function renderLog() {
     e.preventDefault();
     check();
     if (!parsed || !Object.keys(parsed.values).length || parsed.problems.length) return;
-    const more = Object.entries(parsed.values).map(([k, v]) => `${k}=${v}`).join(" ");
+    const more = Object.entries(parsed.values).map(([k, v]) => `${k}=${String(v).replace(/[\s=,]+/g, "_")}`).join(" ");
     if (await runWorkflow("labs", { date: $("#l-date").value, more }, "Blood results")) show("trends");
   });
   $("#b-refresh").addEventListener("click", () => runWorkflow("refresh", { mode: "refresh" }, "Update"));
@@ -1586,7 +1587,12 @@ const LAB_ALIASES = [
   ["ast", ["aspartate aminotransferase", "ast"]], ["ggt", ["gamma glutamyl transferase", "gamma-glutamyl transferase", "ggt"]],
   ["ldh", ["lactate dehydrogenase", "ldh"]], ["albumin", ["serum albumin", "albumin"]], ["bilirubin", ["total bilirubin", "bilirubin"]],
   ["crp", ["c-reactive protein", "c reactive protein", "crp"]], ["ferritin", ["ferritin"]], ["urate", ["uric acid", "urate"]],
-  ["igg", ["immunoglobulin g", "igg"]], ["fsh", ["follicle stimulating hormone", "fsh"]],
+  ["flc_ratio", ["kappa/lambda", "kappa lambda ratio", "light chain ratio", "flc ratio"]],
+  ["kappa_flc", ["kappa free light chain", "kappa"]], ["lambda_flc", ["lambda free light chain", "lambda"]],
+  ["paraprotein", ["protein electrophoresis", "immunofixation", "paraprotein", "ife"]],
+  ["total_protein", ["total protein"]], ["globulin", ["globulin"]],
+  ["igg", ["immunoglobulin g", "igg"]], ["iga", ["immunoglobulin a", "iga"]], ["igm", ["immunoglobulin m", "igm"]],
+  ["fsh", ["follicle stimulating hormone", "fsh"]],
   ["lh", ["luteinising hormone", "luteinizing hormone", "lh"]], ["prolactin", ["prolactin"]],
   ["shbg", ["sex hormone binding globulin", "shbg"]], ["cortisol", ["cortisol"]],
 ];
@@ -1594,7 +1600,7 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
 
 function parseLabs(text) {
   const values = {}, skipped = [], problems = [];
-  let date = null;
+  let date = null, lastText = null;
   for (const raw of String(text).split(/\n/)) {
     const line = raw.replace(/^[\s•*-]+/, "").trim();
     if (!line) continue;
@@ -1608,12 +1614,22 @@ function parseLabs(text) {
     if (cut < 0) {  // "FSH 13.3 IU/L": no separator, the name runs up to the first number
       cut = line.search(/\s[<>]?\d/);
       loose = true;
-      if (cut < 0) continue;  // a heading, not a result
+      if (cut < 0) {  // a heading, or the wrapped end of a text result ("…No" / "Monoclonal Protein Detected")
+        if (lastText && /^[a-z ,.]+$/i.test(line) && !/\(\d/.test(line)) values[lastText] += ` ${line}`;
+        lastText = null;
+        continue;
+      }
     }
+    lastText = null;
     const name = line.slice(0, cut).toLowerCase(), rest = line.slice(cut + 1).trim();
     const num = rest.match(/^[<>]?\s*(-?\d+(?:\.\d+)?)/);
     const words = ` ${name.replace(/[()]/g, " ").replace(/\s+/g, " ")} `;
     const hit = LAB_ALIASES.find(([, names]) => names.some((n) => words.includes(` ${n} `)));
+    if (hit && hit[0] === "paraprotein" && !loose) {  // a result in words, which may wrap onto the next line
+      const words_ = rest.replace(/\s+/g, " ").trim();
+      if (words_) { values.paraprotein = words_; lastText = "paraprotein"; continue; }
+    }
+    if (!hit && lastText && cut < 0) continue;
     if (!hit || !num || /^[<>]/.test(rest)) { if (!loose) skipped.push(line.slice(0, cut).trim()); continue; }
     let v = parseFloat(num[1]);
     const key = hit[0];
