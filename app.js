@@ -1656,6 +1656,15 @@ function parseLabs(text) {
 }
 
 // ---------- settings ----------
+// "build 45 (1a2b3c4, 7 Nov)": the Android build number matches the release name on GitHub ("RS Coach app – build 45").
+function buildLabel() {
+  const b = window.APP_BUILD || {};
+  const when = b.date ? `, ${shortDate(b.date)}` : "";
+  if (b.kind === "android") return `build ${esc(b.build)} (${esc(b.sha)}${when})`;
+  if (b.kind === "web") return `web version (${esc(b.sha)}${when})`;
+  return "development copy";
+}
+
 function renderSettings() {
   const v = $("#view-settings");
   v.innerHTML = `${LOGO}<div class="card settings"><h2>Connections</h2>
@@ -1666,7 +1675,7 @@ function renderSettings() {
     <p class="help">For "Ask the coach". Can be the same key as the repo's ANTHROPIC_API_KEY secret.</p>
     <div class="actions"><button class="primary" id="s-save">Save</button><button class="secondary" id="s-test">Test</button></div>
     <p class="help">Keys are stored only on this phone, inside the app.</p></div>
-    <div class="card small muted">RS Coach · coach ${esc(modelName(modelFor("default")))}${profile().medical ? ` · blood results ${esc(modelName(modelFor("medical")))}` : ""}</div>`;
+    <div class="card small muted">RS Coach · ${buildLabel()} · coach ${esc(modelName(modelFor("default")))}${profile().medical ? ` · blood results ${esc(modelName(modelFor("medical")))}` : ""}</div>`;
   const read = () => ({ repo: $("#s-repo").value.trim() || DEFAULT_REPO, github: $("#s-gh").value.trim(), anthropic: $("#s-ai").value.trim() });
   $("#s-save").addEventListener("click", () => {
     settings = read();
